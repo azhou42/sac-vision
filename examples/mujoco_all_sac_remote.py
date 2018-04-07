@@ -6,9 +6,10 @@ from rllab import config
 
 from sac.algos import SAC
 from sac.envs.gym_env import GymEnv
+from sac.envs.delayed_env import DelayedEnv
 from sac.misc.instrument import run_sac_experiment
 from sac.misc.utils import timestamp
-from sac.misc.sampler import SimpleSampler
+from sac.misc.remote_sampler import RemoteSampler
 from sac.policies.gmm import GMMPolicy
 from sac.replay_buffers import SimpleReplayBuffer
 from sac.value_functions import NNQFunction, NNVFunction
@@ -119,13 +120,14 @@ def run_experiment(variant):
         env = normalize(SwimmerEnv())
     else:
         env = normalize(GymEnv(variant['env_name']))
+    env = DelayedEnv(env, delay=0.01)
 
     pool = SimpleReplayBuffer(
         env_spec=env.spec,
         max_replay_buffer_size=variant['max_pool_size'],
     )
 
-    sampler = SimplerSampler(
+    sampler = RemoteSampler(
         max_path_length=variant['max_path_length'],
         min_pool_size=variant['max_path_length'],
         batch_size=variant['batch_size']
@@ -195,6 +197,7 @@ def launch_experiments(variant_generator):
             seed=variant['seed'],
             terminate_machine=True,
             log_dir=args.log_dir,
+            use_cloudpickle=True,
             snapshot_mode=variant['snapshot_mode'],
             snapshot_gap=variant['snapshot_gap'],
             sync_s3_pkl=variant['sync_pkl'],

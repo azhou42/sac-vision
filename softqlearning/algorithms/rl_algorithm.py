@@ -6,9 +6,9 @@ import numpy as np
 from rllab.misc import logger
 from rllab.algos.base import Algorithm
 
-from sac.core.serializable import deep_clone
-from sac.misc import tf_utils
-from sac.misc.sampler import rollouts
+from softqlearning.misc.utils import deep_clone
+from softqlearning.misc import tf_utils
+from softqlearning.misc.sampler import rollouts
 
 
 class RLAlgorithm(Algorithm):
@@ -25,7 +25,6 @@ class RLAlgorithm(Algorithm):
             n_train_repeat=1,
             epoch_length=1000,
             eval_n_episodes=10,
-            eval_deterministic=True,
             eval_render=False,
     ):
         """
@@ -35,8 +34,6 @@ class RLAlgorithm(Algorithm):
                 for single time step.
             epoch_length (`int`): Epoch length.
             eval_n_episodes (`int`): Number of rollouts to evaluate.
-            eval_deterministic (`int`): Whether or not to run the policy in
-                deterministic mode when evaluating policy.
             eval_render (`int`): Whether or not to render the evaluation
                 environment.
         """
@@ -47,26 +44,32 @@ class RLAlgorithm(Algorithm):
         self._epoch_length = epoch_length
 
         self._eval_n_episodes = eval_n_episodes
-        self._eval_deterministic = eval_deterministic
         self._eval_render = eval_render
 
-        self._sess = tf_utils.get_default_session()
-
-        self._env = None
-        self._policy = None
-        self._pool = None
+        self.env = None
+        self.policy = None
+        self.pool = None
 
     def _train(self, env, policy, pool):
-        self._init_training(env, policy, pool)
+        """Perform RL training.
+
+        Args:
+            env (`rllab.Env`): Environment used for training
+            policy (`Policy`): Policy used for training
+            pool (`PoolBase`): Sample pool to add samples to
+        """
+        self._init_training()
         self.sampler.initialize(env, policy, pool)
 
-        with self._sess.as_default():
+        evaluation_env = deep_clone(env) if self._eval_n_episodes else None
+
+        with tf_utils.get_default_session().as_default():
             gt.rename_root('RLAlgorithm')
             gt.reset()
             gt.set_def_unique(False)
 
-            for epoch in gt.timed_for(range(self._n_epochs + 1),
-                                      save_itrs=True):
+            for epoch in gt.timed_for(
+                    range(self._n_epochs + 1), save_itrs=True):
                 logger.push_prefix('Epoch #%d | ' % epoch)
 
                 for t in range(self._epoch_length):
@@ -77,22 +80,26 @@ class RLAlgorithm(Algorithm):
 
                     for i in range(self._n_train_repeat):
                         self._do_training(
-                            itr=t + epoch * self._epoch_length,
+                            iteration=t + epoch * self._epoch_length,
                             batch=self.sampler.random_batch())
                     gt.stamp('train')
 
-                self._evaluate(epoch)
+                self._evaluate(policy, evaluation_env)
+                gt.stamp('eval')
 
                 params = self.get_snapshot(epoch)
                 logger.save_itr_params(epoch, params)
-                times_itrs = gt.get_times().stamps.itrs
 
-                eval_time = times_itrs['eval'][-1] if epoch > 1 else 0
-                total_time = gt.get_times().total
-                logger.record_tabular('time-train', times_itrs['train'][-1])
-                logger.record_tabular('time-eval', eval_time)
-                logger.record_tabular('time-sample', times_itrs['sample'][-1])
-                logger.record_tabular('time-total', total_time)
+                time_itrs = gt.get_times().stamps.itrs
+                time_eval = time_itrs['eval'][-1]
+                time_total = gt.get_times().total
+                time_train = time_itrs.get('train', [0])[-1]
+                time_sample = time_itrs.get('sample', [0])[-1]
+
+                logger.record_tabular('time-train', time_train)
+                logger.record_tabular('time-eval', time_eval)
+                logger.record_tabular('time-sample', time_sample)
+                logger.record_tabular('time-total', time_total)
                 logger.record_tabular('epoch', epoch)
 
                 self.sampler.log_diagnostics()
@@ -100,24 +107,17 @@ class RLAlgorithm(Algorithm):
                 logger.dump_tabular(with_prefix=False)
                 logger.pop_prefix()
 
-                gt.stamp('eval')
-
             self.sampler.terminate()
 
-    def _evaluate(self, epoch):
-        """Perform evaluation for the current policy.
-
-        :param epoch: The epoch number.
-        :return: None
-        """
+    def _evaluate(self, policy, evaluation_env):
+        """Perform evaluation for the current policy."""
 
         if self._eval_n_episodes < 1:
             return
 
-        with self._policy.deterministic(self._eval_deterministic):
-            paths = rollouts(self._eval_env, self._policy,
-                             self.sampler._max_path_length, self._eval_n_episodes,
-                            )
+        # TODO: max_path_length should be a property of environment.
+        paths = rollouts(evaluation_env, policy, self.sampler._max_path_length,
+                         self._eval_n_episodes)
 
         total_returns = [path['rewards'].sum() for path in paths]
         episode_lengths = [len(p['rewards']) for p in paths]
@@ -131,9 +131,9 @@ class RLAlgorithm(Algorithm):
         logger.record_tabular('episode-length-max', np.max(episode_lengths))
         logger.record_tabular('episode-length-std', np.std(episode_lengths))
 
-        self._eval_env.log_diagnostics(paths)
+        evaluation_env.log_diagnostics(paths)
         if self._eval_render:
-            self._eval_env.render(paths)
+            evaluation_env.render(paths)
 
         if self.sampler.batch_ready():
             batch = self.sampler.random_batch()
@@ -148,32 +148,9 @@ class RLAlgorithm(Algorithm):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _do_training(self, itr, batch):
+    def _do_training(self, iteration, batch):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _init_training(self, env, policy, pool):
-        """Method to be called at the start of training.
-
-        :param env: Environment instance.
-        :param policy:  Policy instance.
-        :return: None
-        """
-
-        self._env = env
-        if self._eval_n_episodes > 0:
-            self._eval_env = deep_clone(env)
-        self._policy = policy
-        self._pool = pool
-
-    @property
-    def policy(self):
-        return self._policy
-
-    @property
-    def env(self):
-        return self._env
-
-    @property
-    def pool(self):
-        return self._pool
+    def _init_training(self):
+        raise NotImplementedError

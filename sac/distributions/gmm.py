@@ -104,20 +104,23 @@ class GMM(object):
             )
             xz_mu_t = tf.boolean_mask(xz_mus_t, mask_t)  # N x Dx
             xz_sig_t = tf.boolean_mask(xz_sigs_t, mask_t)  # N x Dx
+            xz_log_sig_t = tf.boolean_mask(xz_log_sigs_t, mask_t) # N x Dx 
 
             # Sample x.
             x_t = xz_mu_t + xz_sig_t * tf.random_normal((N_t, Dx))  # N x Dx
             if not self._reparameterize:
                 x_t = tf.stop_gradient(x_t)
+            if K > 1:
+                # log p(x|z)
+                log_p_xz_t = self._create_log_gaussian(
+                    xz_mus_t, xz_log_sigs_t, x_t[:, None, :]
+                )  # N x K
 
-            # log p(x|z)
-            log_p_xz_t = self._create_log_gaussian(
-                xz_mus_t, xz_log_sigs_t, x_t[:, None, :]
-            )  # N x K
-
-            # log p(x)
-            log_p_x_t = tf.reduce_logsumexp(log_p_xz_t + log_ws_t, axis=1)
-            log_p_x_t -= tf.reduce_logsumexp(log_ws_t, axis=1)  # N
+                # log p(x)
+                log_p_x_t = tf.reduce_logsumexp(log_p_xz_t + log_ws_t, axis=1)
+                log_p_x_t -= tf.reduce_logsumexp(log_ws_t, axis=1)  # N
+            else: # takes expected value of log_p_x_t in closed form 
+                log_p_x_t = -0.5 * (tf.reduce_sum(xz_log_sig_t, axis=1) + Dx * (1. + np.log(2.*np.pi)))
 
         reg_loss_t = 0
         reg_loss_t += self._reg * 0.5 * tf.reduce_mean(xz_log_sigs_t ** 2)

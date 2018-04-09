@@ -302,10 +302,10 @@ class SAC(RLAlgorithm, Serializable):
         """Construct TensorFlow feed_dict from sample batch."""
 
         feed_dict = {
-            self._obs_pl: batch['observations'],
+            self._obs_pl: np.zeros(batch['observations'].shape), # batch['observations'],
             self._action_pl: batch['actions'],
-            self._obs_next_pl: batch['next_observations'],
-            self._reward_pl: batch['rewards'],
+            self._obs_next_pl: np.zeros(batch['next_observations'].shape), # batch['next_observations'],
+            self._reward_pl: np.zeros(batch['rewards'].shape), # batch['rewards'],
             self._terminal_pl: batch['terminals'],
         }
 

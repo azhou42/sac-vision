@@ -53,8 +53,8 @@ ENV_PARAMS = {
         'prefix': 'half-cheetah',
         'env_name': 'HalfCheetah-v1',
         'max_path_length': 1000,
-        'n_epochs': 10000,
-        'scale_reward': 1,
+        'n_epochs': 5000,
+        'scale_reward': [1,3,5],
         'max_pool_size': 1E7,
     },
     'walker': { # 6 DoF

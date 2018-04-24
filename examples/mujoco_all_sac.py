@@ -143,9 +143,16 @@ def run_experiment(variant):
     )
 
     M = variant['layer_size']
-    qf = NNQFunction(
+    qf1 = NNQFunction(
         env_spec=env.spec,
         hidden_layer_sizes=[M, M],
+        name='qf1',
+    )
+    
+    qf2 = NNQFunction(
+        env_spec=env.spec,
+        hidden_layer_sizes=[M, M],
+        name='qf2',
     )
 
     vf = NNVFunction(
@@ -157,7 +164,7 @@ def run_experiment(variant):
         env_spec=env.spec,
         K=variant['K'],
         hidden_layer_sizes=[M, M],
-        qf=qf,
+        qf=qf1,
         reparameterize=variant['reparameterize'],
         reg=0.001,
     )
@@ -168,7 +175,8 @@ def run_experiment(variant):
         env=env,
         policy=policy,
         pool=pool,
-        qf=qf,
+        qf1=qf1,
+        qf2=qf2,
         vf=vf,
 
         lr=variant['lr'],

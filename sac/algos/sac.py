@@ -264,7 +264,7 @@ class SAC(RLAlgorithm, Serializable):
         corr = self._squash_correction(policy_dist.x_t)
 
         if self._reparameterize: # test min here
-            kl_loss_t = tf.reduce_mean(log_pi_t - log_target1_t - corr)
+            kl_loss_t = tf.reduce_mean(log_pi_t - min_log_target_t - corr)
         else:
             kl_loss_t = tf.reduce_mean(log_pi_t * tf.stop_gradient(
                 log_pi_t - min_log_target_t - corr + self._vf_t))

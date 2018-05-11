@@ -10,6 +10,7 @@ from sac.misc.instrument import run_sac_experiment
 from sac.misc.utils import timestamp
 from sac.misc.sampler import SimpleSampler
 from sac.policies.gmm import GMMPolicy
+from sac.policies.uniform_policy import UniformPolicy
 from sac.replay_buffers import SimpleReplayBuffer
 from sac.value_functions import NNQFunction, NNVFunction
 
@@ -18,17 +19,19 @@ config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
 
 COMMON_PARAMS = {
     "seed": [1, 11, 21],
-    "lr": [1E-4, 3E-4],
+    "lr": [3E-4],
     "discount": 0.99,
     "tau": 1,
     "target_update_freq": 1000,
     "K": 1,
-    "layer_size": 256,
+    "layer_size": 512,
     "batch_size": 256,
     "max_pool_size": 1E6,
+    "learn_alpha": True,
     "n_train_repeat": 1,
+    "n_random_steps": 10000,
     "epoch_length": 1000,
-    "reparameterize": False,
+    "reparameterize": True,
     "snapshot_mode": 'gap',
     "snapshot_gap": 100,
     "sync_pkl": True,
@@ -54,9 +57,9 @@ ENV_PARAMS = {
         'prefix': 'half-cheetah',
         'env_name': 'HalfCheetah-v1',
         'max_path_length': 1000,
-        'n_epochs': 10000,
+        'n_epochs': 1000,
         'scale_reward': 1,
-        'max_pool_size': 1E7,
+        'target_entropy': -6,
     },
     'walker': { # 6 DoF
         'prefix': 'walker',
@@ -69,7 +72,8 @@ ENV_PARAMS = {
         'prefix': 'ant',
         'env_name': 'Ant-v1',
         'max_path_length': 1000,
-        'n_epochs': 10000,
+        'n_epochs': 2000,
+        'target_entropy': -8,
         'scale_reward': [3,5,10],
     },
     'humanoid': { # 21 DoF
@@ -137,6 +141,7 @@ def run_experiment(variant):
         sampler=sampler,
         epoch_length=variant['epoch_length'],
         n_epochs=variant['n_epochs'],
+        n_random_steps=variant['n_random_steps'],
         n_train_repeat=variant['n_train_repeat'],
         eval_render=False,
         eval_n_episodes=1,
@@ -154,6 +159,8 @@ def run_experiment(variant):
         hidden_layer_sizes=[M, M],
     )
 
+    uniform_policy = UniformPolicy(env_spec=env.spec)
+
     policy = GMMPolicy(
         env_spec=env.spec,
         K=variant['K'],
@@ -168,6 +175,7 @@ def run_experiment(variant):
         base_kwargs=base_kwargs,
         env=env,
         policy=policy,
+        uniform_policy=uniform_policy,
         pool=pool,
         qf=qf,
         vf=vf,

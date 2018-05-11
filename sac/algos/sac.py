@@ -77,6 +77,7 @@ class SAC(RLAlgorithm, Serializable):
 
             env,
             policy,
+            uniform_policy,
             qf,
             vf,
             pool,
@@ -89,6 +90,8 @@ class SAC(RLAlgorithm, Serializable):
             target_update_freq=1,
 
             reparameterize=True,
+            learn_alpha=False,
+            target_entropy=None,
             save_full_state=False,
     ):
         """
@@ -117,6 +120,7 @@ class SAC(RLAlgorithm, Serializable):
 
         self._env = env
         self._policy = policy
+        self._uniform_policy = uniform_policy
         self._qf = qf
         self._vf = vf
         self._pool = pool
@@ -136,6 +140,12 @@ class SAC(RLAlgorithm, Serializable):
         self._Da = self._env.action_space.flat_dim
         self._Do = self._env.observation_space.flat_dim
 
+        self._learn_alpha = learn_alpha
+        if learn_alpha:
+            self._initial_log_alpha = 0.0
+            self._target_entropy = target_entropy
+            self._scale_reward = 1 # set it to one by default
+
         self._training_ops = list()
 
         self._init_placeholders()
@@ -149,7 +159,7 @@ class SAC(RLAlgorithm, Serializable):
     def train(self):
         """Initiate training of the SAC instance."""
 
-        self._train(self._env, self._policy, self._pool)
+        self._train(self._env, self._policy, self._uniform_policy, self._pool)
 
     def _init_placeholders(self):
         """Create input placeholders for the SAC algorithm.
@@ -201,7 +211,6 @@ class SAC(RLAlgorithm, Serializable):
         See Equation (10) in [1], for further information of the
         Q-function update rule.
         """
-
         self._qf_t = self._qf.get_output_for(
             self._obs_pl, self._action_pl, reuse=True)  # N
 
@@ -238,10 +247,27 @@ class SAC(RLAlgorithm, Serializable):
         See Equations (8, 13) in [1], for further information
         of the value function and policy function update rules.
         """
+        if self._learn_alpha:
+            log_alpha = tf.get_variable('log_alpha', dtype=tf.float32, initializer=self._initial_log_alpha)
+            alpha = tf.exp(log_alpha)
+            alpha_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'log_alpha')
+        else:
+            alpha = 1.
+
 
         policy_dist = self._policy.get_distribution_for(
             self._obs_pl, reuse=True)
         log_pi_t = policy_dist.log_p_t  # N
+        self._log_pi_t = log_pi_t
+        
+        if self._learn_alpha:
+            log_alpha = tf.get_variable('log_alpha', dtype=tf.float32, initializer=self._initial_log_alpha)
+            alpha = tf.exp(log_alpha)
+            alpha_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'log_alpha')
+            alpha_loss = tf.reduce_mean((log_alpha * tf.stop_gradient(-log_pi_t - self._target_entropy)))
+            self._alpha_train_op = tf.train.AdamOptimizer(self._policy_lr).minimize(loss=alpha_loss, var_list = alpha_params)
+        else:
+            alpha = 1.
 
         self._vf_t = self._vf.get_output_for(self._obs_pl, reuse=True)  # N
         self._vf_params = self._vf.get_params_internal()
@@ -251,13 +277,13 @@ class SAC(RLAlgorithm, Serializable):
         corr = self._squash_correction(policy_dist.x_t)
 
         if self._reparameterize:
-            kl_loss_t = tf.reduce_mean(log_pi_t - log_target_t - corr)
+            kl_loss_t = tf.reduce_mean(alpha * (log_pi_t - corr) - log_target_t)
         else:
             kl_loss_t = tf.reduce_mean(log_pi_t * tf.stop_gradient(
-                log_pi_t - log_target_t - corr + self._vf_t))
+                alpha * log_pi_t - log_target_t - corr + self._vf_t))
 
         self._vf_loss_t = 0.5 * tf.reduce_mean(
-            (self._vf_t - tf.stop_gradient(log_target_t - log_pi_t + corr))**2)
+            (self._vf_t - tf.stop_gradient(log_target_t - alpha * (log_pi_t - corr)))**2)
 
         policy_train_op = tf.train.AdamOptimizer(self._policy_lr).minimize(
             loss=kl_loss_t + policy_dist.reg_loss_t,
@@ -268,6 +294,7 @@ class SAC(RLAlgorithm, Serializable):
             loss=self._vf_loss_t,
             var_list=self._vf_params
         )
+        
 
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)

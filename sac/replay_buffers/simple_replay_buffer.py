@@ -6,11 +6,12 @@ from .replay_buffer import ReplayBuffer
 
 
 class SimpleReplayBuffer(ReplayBuffer, Serializable):
-    def __init__(self, env_spec, max_replay_buffer_size):
+    def __init__(self, env_spec, max_replay_buffer_size, freeze_after_full=False):
         Serializable.quick_init(self, locals())
         super(SimpleReplayBuffer, self).__init__(env_spec)
 
         max_replay_buffer_size = int(max_replay_buffer_size)
+        self._freeze_after_full = freeze_after_full
 
         self._env_spec = env_spec
         self._observation_dim = env_spec.observation_space.flat_dim
@@ -32,6 +33,8 @@ class SimpleReplayBuffer(ReplayBuffer, Serializable):
 
     def add_sample(self, observation, action, reward, terminal,
                    next_observation, **kwargs):
+        if self._freeze_after_full and self._size > self._max_buffer_size:
+            return
         self._observations[self._top] = observation
         self._actions[self._top] = action
         self._rewards[self._top] = reward

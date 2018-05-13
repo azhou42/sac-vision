@@ -24,6 +24,7 @@ class RLAlgorithm(Algorithm):
             n_epochs=1000,
             n_train_repeat=1,
             epoch_length=1000,
+            n_random_steps=10000,
             eval_n_episodes=10,
             eval_deterministic=True,
             eval_render=False,
@@ -45,6 +46,7 @@ class RLAlgorithm(Algorithm):
         self._n_epochs = n_epochs
         self._n_train_repeat = n_train_repeat
         self._epoch_length = epoch_length
+        self._n_random_steps = n_random_steps
 
         self._eval_n_episodes = eval_n_episodes
         self._eval_deterministic = eval_deterministic
@@ -56,9 +58,9 @@ class RLAlgorithm(Algorithm):
         self._policy = None
         self._pool = None
 
-    def _train(self, env, policy, pool):
+    def _train(self, env, policy, uniform_policy, pool):
         self._init_training(env, policy, pool)
-        self.sampler.initialize(env, policy, pool)
+        self.sampler.initialize(env, uniform_policy, pool) # use uniform sampler initially
 
         with self._sess.as_default():
             gt.rename_root('RLAlgorithm')
@@ -67,6 +69,8 @@ class RLAlgorithm(Algorithm):
 
             for epoch in gt.timed_for(range(self._n_epochs + 1),
                                       save_itrs=True):
+                if self._epoch_length * epoch >= self._n_random_steps:
+                    self.sampler.set_policy(policy)
                 logger.push_prefix('Epoch #%d | ' % epoch)
 
                 for t in range(self._epoch_length):

@@ -79,6 +79,7 @@ class SAC(RLAlgorithm, Serializable):
             policy,
             qf1,
             qf2,
+            uniform_policy,
             vf,
             pool,
             plotter=None,
@@ -90,6 +91,8 @@ class SAC(RLAlgorithm, Serializable):
             target_update_freq=1,
 
             reparameterize=True,
+            learn_alpha=False,
+            target_entropy=None,
             save_full_state=False,
     ):
         """
@@ -120,6 +123,7 @@ class SAC(RLAlgorithm, Serializable):
         self._policy = policy
         self._qf1 = qf1
         self._qf2 = qf2
+        self._uniform_policy = uniform_policy
         self._vf = vf
         self._pool = pool
         self._plotter = plotter
@@ -138,6 +142,12 @@ class SAC(RLAlgorithm, Serializable):
         self._Da = self._env.action_space.flat_dim
         self._Do = self._env.observation_space.flat_dim
 
+        self._learn_alpha = learn_alpha
+        if learn_alpha:
+            self._initial_log_alpha = 0.0
+            self._target_entropy = target_entropy
+            self._scale_reward = 1 # set it to one by default
+
         self._training_ops = list()
 
         self._init_placeholders()
@@ -151,7 +161,7 @@ class SAC(RLAlgorithm, Serializable):
     def train(self):
         """Initiate training of the SAC instance."""
 
-        self._train(self._env, self._policy, self._pool)
+        self._train(self._env, self._policy, self._uniform_policy, self._pool)
 
     def _init_placeholders(self):
         """Create input placeholders for the SAC algorithm.
@@ -203,11 +213,10 @@ class SAC(RLAlgorithm, Serializable):
         See Equation (10) in [1], for further information of the
         Q-function update rule.
         """
-
         self._qf1_t = self._qf1.get_output_for(
             self._obs_pl, self._action_pl, reuse=True)  # N
         self._qf2_t = self._qf2.get_output_for(
-            self._obs_pl, self._action_pl, reuse=True)  # N
+            self._obs_pl, self._action_pl, reuse=True)
 
         with tf.variable_scope('target'):
             vf_next_target_t = self._vf.get_output_for(self._obs_next_pl)  # N
@@ -248,10 +257,22 @@ class SAC(RLAlgorithm, Serializable):
         See Equations (8, 13) in [1], for further information
         of the value function and policy function update rules.
         """
-
         policy_dist = self._policy.get_distribution_for(
             self._obs_pl, reuse=True)
         log_pi_t = policy_dist.log_p_t  # N
+        self._log_pi_t = log_pi_t
+        
+        if self._learn_alpha:
+            log_alpha = tf.get_variable('log_alpha', dtype=tf.float32, initializer=self._initial_log_alpha)
+            alpha = tf.exp(log_alpha)
+            alpha_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'log_alpha')
+            alpha_loss = tf.reduce_mean((log_alpha * tf.stop_gradient(-log_pi_t - self._target_entropy)))
+            self._alpha_train_op = tf.train.AdamOptimizer(self._policy_lr).minimize(loss=alpha_loss, var_list = alpha_params)
+            self._training_ops.append(self._alpha_train_op)
+        else:
+            alpha = 1.
+        self._alpha = alpha
+
 
         self._vf_t = self._vf.get_output_for(self._obs_pl, reuse=True)  # N
         self._vf_params = self._vf.get_params_internal()
@@ -263,14 +284,15 @@ class SAC(RLAlgorithm, Serializable):
         min_log_target_t = tf.minimum(log_target1_t, log_target2_t)
         corr = self._squash_correction(policy_dist.x_t)
 
-        if self._reparameterize: # test min here
-            kl_loss_t = tf.reduce_mean(log_pi_t - min_log_target_t - corr)
+        if self._reparameterize:
+            kl_loss_t = tf.reduce_mean(alpha * (log_pi_t - corr) - min_log_target_t)
         else:
+            1/0
             kl_loss_t = tf.reduce_mean(log_pi_t * tf.stop_gradient(
-                log_pi_t - min_log_target_t - corr + self._vf_t))
+                alpha * log_pi_t - log_target_t - corr + self._vf_t))
 
         self._vf_loss_t = 0.5 * tf.reduce_mean(
-            (self._vf_t - tf.stop_gradient(min_log_target_t - log_pi_t + corr))**2)
+            (self._vf_t - tf.stop_gradient(min_log_target_t - alpha * (log_pi_t - corr)))**2)
 
         policy_train_op = tf.train.AdamOptimizer(self._policy_lr).minimize(
             loss=kl_loss_t + policy_dist.reg_loss_t,
@@ -281,6 +303,7 @@ class SAC(RLAlgorithm, Serializable):
             loss=self._vf_loss_t,
             var_list=self._vf_params
         )
+        
 
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)
@@ -339,8 +362,8 @@ class SAC(RLAlgorithm, Serializable):
         """
 
         feed_dict = self._get_feed_dict(batch)
-        qf1, qf2, vf, td_loss1, td_loss2 = self._sess.run(
-            [self._qf1_t, self._qf2_t, self._vf_t, self._td_loss1_t, self._td_loss2_t], feed_dict)
+        qf1, qf2, vf, td_loss1, td_loss2, log_pi = self._sess.run(
+            [self._qf1_t, self._qf2_t, self._vf_t, self._td_loss1_t, self._td_loss2_t, self._log_pi_t], feed_dict)
 
         logger.record_tabular('qf1-avg', np.mean(qf1))
         logger.record_tabular('qf1-std', np.std(qf1))
@@ -351,6 +374,10 @@ class SAC(RLAlgorithm, Serializable):
         logger.record_tabular('vf-std', np.std(vf))
         logger.record_tabular('mean-sq-bellman-error1', td_loss1)
         logger.record_tabular('mean-sq-bellman-error2', td_loss2)
+        logger.record_tabular('log-pi-avg', np.mean(log_pi))
+        if self._learn_alpha:
+            alpha = self._sess.run(self._alpha)
+            logger.record_tabular('alpha', alpha)
 
         self._policy.log_diagnostics(batch)
         if self._plotter:

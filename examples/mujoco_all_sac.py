@@ -10,24 +10,29 @@ from sac.misc.instrument import run_sac_experiment
 from sac.misc.utils import timestamp
 from sac.misc.sampler import SimpleSampler
 from sac.policies.gmm import GMMPolicy
+from sac.policies.uniform_policy import UniformPolicy
 from sac.replay_buffers import SimpleReplayBuffer
 from sac.value_functions import NNQFunction, NNVFunction
+import numpy as np
 
 config.DOCKER_IMAGE = "haarnoja/sac"  # needs psutils
 config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
 
 COMMON_PARAMS = {
-    "seed": [1, 11, 21],
+    "seed": [2 + 10*i for i in range(10)],
     "lr": [3E-4],
     "discount": 0.99,
     "tau": 1,
     "target_update_freq": 1000,
     "K": 1,
-    "layer_size": [32, 64, 128, 256, 512, 1024],
+    "layer_size": 512,
     "batch_size": 256,
-    "max_pool_size": 1E6,
+    "max_pool_size": 1e6, # [1e3, 1e4, 1e5],
+    "learn_alpha": False,
     "n_train_repeat": 1,
+    "n_random_steps": 1000,
     "epoch_length": 1000,
+    "freeze_pool_after_full": False, # make sure this is false for real runs
     "reparameterize": True,
     "snapshot_mode": 'gap',
     "snapshot_gap": 100,
@@ -54,30 +59,37 @@ ENV_PARAMS = {
         'prefix': 'half-cheetah',
         'env_name': 'HalfCheetah-v1',
         'max_path_length': 1000,
-        'n_epochs': 10000,
-        'scale_reward': [3,5],
-        'max_pool_size': 1E6,
+        'n_epochs': 1000,
+        "n_random_steps": 10000,
+        'scale_reward': [5], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)], # 1, # scale rewards from 0.1 to 100
+        'target_entropy': -6 # [i for i in np.linspace(-10, 5, num=30)] # k
     },
     'walker': { # 6 DoF
         'prefix': 'walker',
         'env_name': 'Walker2d-v1',
         'max_path_length': 1000,
-        'n_epochs': 5000,
-        'scale_reward': [3,5,10],
+        'n_epochs': 1000,
+        "n_random_steps": 1000,
+        'scale_reward': [3],
+        'target_entropy': -6 
     },
     'ant': { # 8 DoF
         'prefix': 'ant',
         'env_name': 'Ant-v1',
         'max_path_length': 1000,
-        'n_epochs': 10000,
-        'scale_reward': [5,10],
+        'n_epochs': 2000,
+        "n_random_steps": 10000,
+        'target_entropy': -8, # [i for i in np.linspace(-10, 5, num=30)], 
+        'scale_reward': [5,10], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)],
     },
-    'humanoid': { # 21 DoF
+    'humanoid': { # 17 DoF
         'prefix': 'humanoid',
-        'env_name': 'humanoid-rllab',
+        'env_name': 'Humanoid-v1', # switch to gym humanoid
         'max_path_length': 1000,
-        'n_epochs': 20000,
-        'scale_reward': 3,
+        'n_epochs': 10000,
+        "n_random_steps": 1000,
+        'scale_reward': [0.1, 0.3, 1, 3], # [5,10,20,40],
+        'target_entropy': -17, 
     },
 }
 DEFAULT_ENV = 'swimmer'
@@ -114,6 +126,7 @@ def get_variants(args):
 
 def run_experiment(variant):
     if variant['env_name'] == 'humanoid-rllab':
+        1/0
         from rllab.envs.mujoco.humanoid_env import HumanoidEnv
         env = normalize(HumanoidEnv())
     elif variant['env_name'] == 'swimmer-rllab':
@@ -124,6 +137,7 @@ def run_experiment(variant):
 
     pool = SimpleReplayBuffer(
         env_spec=env.spec,
+        freeze_after_full=variant['freeze_pool_after_full'],
         max_replay_buffer_size=variant['max_pool_size'],
     )
 
@@ -137,6 +151,7 @@ def run_experiment(variant):
         sampler=sampler,
         epoch_length=variant['epoch_length'],
         n_epochs=variant['n_epochs'],
+        n_random_steps=variant['n_random_steps'],
         n_train_repeat=variant['n_train_repeat'],
         eval_render=False,
         eval_n_episodes=1,
@@ -161,6 +176,8 @@ def run_experiment(variant):
         hidden_layer_sizes=[M, M],
     )
 
+    uniform_policy = UniformPolicy(env_spec=env.spec)
+
     policy = GMMPolicy(
         env_spec=env.spec,
         K=variant['K'],
@@ -175,6 +192,7 @@ def run_experiment(variant):
         base_kwargs=base_kwargs,
         env=env,
         policy=policy,
+        uniform_policy=uniform_policy,
         pool=pool,
         qf1=qf1,
         qf2=qf2,
@@ -187,6 +205,8 @@ def run_experiment(variant):
         target_update_freq=variant['target_update_freq'],
 
         reparameterize=variant['reparameterize'],
+        learn_alpha=variant['learn_alpha'],
+        target_entropy=variant['target_entropy'],
         save_full_state=False,
     )
 
@@ -202,7 +222,7 @@ def launch_experiments(variant_generator):
             run_experiment,
             mode=args.mode,
             variant=variant,
-            exp_prefix=variant['prefix'] + '/' + args.exp_name,
+            exp_prefix='nips' + '/' + variant['prefix'] + '/' + args.exp_name,
             exp_name=variant['prefix'] + '-' + args.exp_name + '-' + str(i).zfill(2),
             n_parallel=1,
             seed=variant['seed'],

@@ -6,6 +6,7 @@ import numpy as np
 from sac.misc.mlp import mlp
 
 LOG_SIG_CAP_MAX = 2
+LOG_SIG_CAP_MIN = -20
 
 
 class GMM(object):
@@ -75,6 +76,7 @@ class GMM(object):
         log_sig_t = w_and_mu_and_logsig_t[..., 1+Dx:]
 
         log_sig_t = tf.minimum(log_sig_t, LOG_SIG_CAP_MAX)
+        log_sig_t = tf.maximum(log_sig_t, LOG_SIG_CAP_MIN)
 
         return log_w_t, mu_t, log_sig_t
 

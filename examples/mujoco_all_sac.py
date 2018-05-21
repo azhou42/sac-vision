@@ -23,7 +23,7 @@ COMMON_PARAMS = {
     "tau": 1,
     "target_update_freq": 1000,
     "K": 1,
-    "layer_size": [32, 64, 128, 256, 512, 1024],
+    "layer_size": 256,
     "batch_size": 256,
     "max_pool_size": 1E6,
     "n_train_repeat": 1,

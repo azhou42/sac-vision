@@ -107,10 +107,12 @@ class GMM(object):
             xz_mu_t = tf.boolean_mask(xz_mus_t, mask_t)  # N x Dx
             xz_sig_t = tf.boolean_mask(xz_sigs_t, mask_t)  # N x Dx
 
+            self._determ_action = tf.tanh(xz_mu_t)
+
             # Sample x.
-            x_t = xz_mu_t + xz_sig_t * tf.random_normal((N_t, Dx))  # N x Dx
-            if not self._reparameterize:
-                x_t = tf.stop_gradient(x_t)
+            SIGMA = 0.1 # exploration noise
+            x_t = tf.tanh(xz_mu_t) + SIGMA * tf.random_normal((N_t, Dx))  # N x Dx
+            x_t = tf.stop_gradient(x_t)
 
             # log p(x|z)
             log_p_xz_t = self._create_log_gaussian(
@@ -132,6 +134,10 @@ class GMM(object):
         self._log_ws_t = log_ws_t
         self._mus_t = xz_mus_t
         self._log_sigs_t = xz_log_sigs_t
+
+    @property
+    def determ_action(self):
+        return self._determ_action
 
     @property
     def log_p_t(self):

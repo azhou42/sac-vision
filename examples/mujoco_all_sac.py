@@ -4,7 +4,7 @@ from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import VariantGenerator
 from rllab import config
 
-from sac.algos import SAC
+from sac.algos.ddpg import DDPG 
 from sac.envs.gym_env import GymEnv
 from sac.misc.instrument import run_sac_experiment
 from sac.misc.utils import timestamp
@@ -26,7 +26,7 @@ COMMON_PARAMS = {
     "target_update_freq": 1000,
     "K": 1,
     "layer_size": 512,
-    "batch_size": 256,
+    "batch_size": 256, # 100?
     "max_pool_size": 1e6, # [1e3, 1e4, 1e5],
     "learn_alpha": False,
     "n_train_repeat": 1,
@@ -61,8 +61,7 @@ ENV_PARAMS = {
         'max_path_length': 1000,
         'n_epochs': 1000,
         "n_random_steps": 10000,
-        'scale_reward': [5], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)], # 1, # scale rewards from 0.1 to 100
-        'target_entropy': -6 # [i for i in np.linspace(-10, 5, num=30)] # k
+        'scale_reward': [1], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)], # 1, # scale rewards from 0.1 to 100
     },
     'walker': { # 6 DoF
         'prefix': 'walker',
@@ -70,8 +69,7 @@ ENV_PARAMS = {
         'max_path_length': 1000,
         'n_epochs': 1000,
         "n_random_steps": 1000,
-        'scale_reward': [3],
-        'target_entropy': -6 
+        'scale_reward': [1],
     },
     'ant': { # 8 DoF
         'prefix': 'ant',
@@ -79,8 +77,7 @@ ENV_PARAMS = {
         'max_path_length': 1000,
         'n_epochs': 2000,
         "n_random_steps": 10000,
-        'target_entropy': -8, # [i for i in np.linspace(-10, 5, num=30)], 
-        'scale_reward': [5,10], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)],
+        'scale_reward': [1], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)],
     },
     'humanoid': { # 17 DoF
         'prefix': 'humanoid',
@@ -88,8 +85,7 @@ ENV_PARAMS = {
         'max_path_length': 1000,
         'n_epochs': 10000,
         "n_random_steps": 1000,
-        'scale_reward': [0.1, 0.3, 1, 3], # [5,10,20,40],
-        'target_entropy': -17, 
+        'scale_reward': [1], # [5,10,20,40],
     },
 }
 DEFAULT_ENV = 'swimmer'
@@ -188,7 +184,7 @@ def run_experiment(variant):
     )
     
 
-    algorithm = SAC(
+    algorithm = DDPG(
         base_kwargs=base_kwargs,
         env=env,
         policy=policy,
@@ -196,7 +192,6 @@ def run_experiment(variant):
         pool=pool,
         qf1=qf1,
         qf2=qf2,
-        vf=vf,
 
         lr=variant['lr'],
         scale_reward=variant['scale_reward'],
@@ -204,9 +199,6 @@ def run_experiment(variant):
         tau=variant['tau'],
         target_update_freq=variant['target_update_freq'],
 
-        reparameterize=variant['reparameterize'],
-        learn_alpha=variant['learn_alpha'],
-        target_entropy=variant['target_entropy'],
         save_full_state=False,
     )
 

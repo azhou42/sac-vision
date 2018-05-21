@@ -51,7 +51,7 @@ class GMMPolicy(NNPolicy, Serializable):
         super(GMMPolicy, self).__init__(
             env_spec,
             self._obs_pl,
-            tf.tanh(self._dist.x_t) if squash else self._dist.x_t,
+            self._dist.x_t, # squashing done inside the distribution for now
             'policy'
         )
 
@@ -80,6 +80,9 @@ class GMMPolicy(NNPolicy, Serializable):
 
         if not self._is_deterministic:
             return NNPolicy.get_action(self, obs)
+        
+        feeds = {self._obs_pl: obs[None]}
+        return tf.get_default_session().run(self._dist.determ_action, feeds), {}
 
         # Handle the deterministic case separately.
         if self._qf is None:

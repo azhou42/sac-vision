@@ -257,7 +257,6 @@ class DDPG(RLAlgorithm, Serializable):
             self._obs_pl, reuse=True)
         policy_act = policy_dist.determ_action
 
-
         log_target1_t = self._qf1.get_output_for(
             self._obs_pl, policy_act, reuse=True)  # N
         log_target2_t = self._qf2.get_output_for(

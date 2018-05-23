@@ -19,7 +19,7 @@ config.DOCKER_IMAGE = "haarnoja/sac"  # needs psutils
 config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
 
 COMMON_PARAMS = {
-    "seed": [2 + 10*i for i in range(10)],
+    "seed": [2 + 10*i for i in range(3)],
     "lr": [3E-4],
     "discount": 0.99,
     "tau": 1,

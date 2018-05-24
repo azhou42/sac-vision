@@ -16,7 +16,7 @@ from sac.misc import tf_utils
 class GMMPolicy(NNPolicy, Serializable):
     """Gaussian Mixture Model policy"""
     def __init__(self, env_spec, K=2, hidden_layer_sizes=(100, 100), reg=0.001,
-                 squash=True, reparameterize=True, qf=None):
+                 squash=True, reparameterize=True, input_skip_connections=False, qf=None):
         """
         Args:
             env_spec (`rllab.EnvSpec`): Specification of the environment
@@ -39,6 +39,7 @@ class GMMPolicy(NNPolicy, Serializable):
         self._qf = qf
         self._reg = reg
         self._reparameterize = reparameterize
+        self._input_skip_connections = input_skip_connections
 
         self._obs_pl = tf.placeholder(
             tf.float32,
@@ -65,7 +66,8 @@ class GMMPolicy(NNPolicy, Serializable):
                 Dx=self._Da,
                 cond_t_lst=[obs_t],
                 reg=self._reg,
-                reparameterize=self._reparameterize
+                reparameterize=self._reparameterize,
+                input_skip_connections = self._input_skip_connections
             )
 
         return gmm

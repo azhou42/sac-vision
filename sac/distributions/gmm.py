@@ -18,6 +18,7 @@ class GMM(object):
             reg=0.001,
             cond_t_lst=(),
             reparameterize=True,
+            input_skip_connections=False
     ):
         self._cond_t_lst = cond_t_lst
         self._reg = reg
@@ -26,6 +27,7 @@ class GMM(object):
         self._Dx = Dx
         self._K = K
         self._reparameterize = reparameterize
+        self._input_skip_connections = input_skip_connections
 
         self._create_placeholders()
         self._create_graph()
@@ -66,6 +68,7 @@ class GMM(object):
                 inputs=self._cond_t_lst,
                 layer_sizes=self._layer_sizes,
                 output_nonlinearity=None,
+                input_skip_connections=self._input_skip_connections
             )  # ... x K*Dx*2+K
 
         w_and_mu_and_logsig_t = tf.reshape(

@@ -10,13 +10,14 @@ from sac.misc import tf_utils
 
 class ValueFunction(Parameterized, Serializable):
 
-    def __init__(self, name, input_pls, hidden_layer_sizes):
+    def __init__(self, name, input_pls, hidden_layer_sizes, input_skip_connections):
         Parameterized.__init__(self)
         Serializable.quick_init(self, locals())
 
         self._name = name
         self._input_pls = input_pls
         self._layer_sizes = list(hidden_layer_sizes) + [None]
+        self._input_skip_connections = input_skip_connections
 
         self._output_t = self.get_output_for(*self._input_pls)
 
@@ -26,6 +27,7 @@ class ValueFunction(Parameterized, Serializable):
                 inputs=inputs,
                 output_nonlinearity=None,
                 layer_sizes=self._layer_sizes,
+                input_skip_connections=self._input_skip_connections
             )  # N
 
         return value_t
@@ -49,7 +51,7 @@ class ValueFunction(Parameterized, Serializable):
 
 class NNVFunction(ValueFunction):
 
-    def __init__(self, env_spec, hidden_layer_sizes=(100, 100), name='vf'):
+    def __init__(self, env_spec, hidden_layer_sizes=(100, 100), input_skip_connections=False, name='vf'):
         Serializable.quick_init(self, locals())
 
         self._Do = env_spec.observation_space.flat_dim
@@ -60,11 +62,11 @@ class NNVFunction(ValueFunction):
         )
 
         super(NNVFunction, self).__init__(
-            name, (self._obs_pl,), hidden_layer_sizes)
+            name, (self._obs_pl,), hidden_layer_sizes, input_skip_connections)
 
 
 class NNQFunction(ValueFunction):
-    def __init__(self, env_spec, hidden_layer_sizes=(100, 100), name='qf'):
+    def __init__(self, env_spec, hidden_layer_sizes=(100, 100), input_skip_connections=False, name='qf'):
         Serializable.quick_init(self, locals())
 
         self._Da = env_spec.action_space.flat_dim
@@ -83,4 +85,4 @@ class NNQFunction(ValueFunction):
         )
 
         super(NNQFunction, self).__init__(
-            name, (self._obs_pl, self._action_pl), hidden_layer_sizes)
+            name, (self._obs_pl, self._action_pl), hidden_layer_sizes, input_skip_connections)

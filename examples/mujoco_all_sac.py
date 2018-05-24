@@ -23,7 +23,7 @@ COMMON_PARAMS = {
     "tau": 1,
     "target_update_freq": 1000,
     "K": 1,
-    "layer_size": 256,
+    "layer_size": [256, 512],
     "batch_size": 256,
     "max_pool_size": 1E6,
     "n_train_repeat": 1,
@@ -32,6 +32,7 @@ COMMON_PARAMS = {
     "snapshot_mode": 'gap',
     "snapshot_gap": 100,
     "sync_pkl": True,
+    "input_skip_connections": False,
 }
 
 
@@ -74,10 +75,17 @@ ENV_PARAMS = {
     },
     'humanoid': { # 21 DoF
         'prefix': 'humanoid',
+        'env_name': 'Humanoid',
+        'max_path_length': 1000,
+        'n_epochs': 20000,
+        'scale_reward': [5, 10, 20],
+    },
+    'humanoid-rllab': { # 21 DoF
+        'prefix': 'humanoid-rllab',
         'env_name': 'humanoid-rllab',
         'max_path_length': 1000,
         'n_epochs': 20000,
-        'scale_reward': 3,
+        'scale_reward': [10, 20, 40],
     },
 }
 DEFAULT_ENV = 'swimmer'
@@ -147,18 +155,21 @@ def run_experiment(variant):
     qf1 = NNQFunction(
         env_spec=env.spec,
         hidden_layer_sizes=[M, M],
+        input_skip_connections=variant['input_skip_connections'],
         name='qf1',
     )
     
     qf2 = NNQFunction(
         env_spec=env.spec,
         hidden_layer_sizes=[M, M],
+        input_skip_connections=variant['input_skip_connections'],
         name='qf2',
     )
 
     vf = NNVFunction(
         env_spec=env.spec,
         hidden_layer_sizes=[M, M],
+        input_skip_connections=variant['input_skip_connections'],
     )
 
     policy = GMMPolicy(
@@ -168,6 +179,7 @@ def run_experiment(variant):
         qf=qf1,
         reparameterize=variant['reparameterize'],
         reg=0.001,
+        input_skip_connections=variant['input_skip_connections'],
     )
     
 

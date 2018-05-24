@@ -86,7 +86,7 @@ def mlp(inputs,
         output_nonlinearity=tf.nn.tanh,
         W_initializer=None,
         b_initializer=None,
-        input_skip_connections=True):
+        input_skip_connections=False):
     """
     Creates a multi-layer perceptron with given hidden sizes. A nonlinearity
     is applied after every hidden layer.

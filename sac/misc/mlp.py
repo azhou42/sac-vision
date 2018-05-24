@@ -85,7 +85,8 @@ def mlp(inputs,
         nonlinearity=tf.nn.relu,
         output_nonlinearity=tf.nn.tanh,
         W_initializer=None,
-        b_initializer=None):
+        b_initializer=None,
+        input_skip_connections=True):
     """
     Creates a multi-layer perceptron with given hidden sizes. A nonlinearity
     is applied after every hidden layer.
@@ -142,6 +143,16 @@ def mlp(inputs,
             layer = affine(layer, size,
                            W_initializer=W_initializer,
                            b_initializer=b_initializer)
+            if input_skip_connections:
+                for i, inp in enumerate(inputs):
+                    with tf.variable_scope('layer{0}_input{1}_skip_connection'.format(i_layer, i)):
+                        layer += affine(
+                            inp=inp,
+                            units=size,
+                            bias=False,
+                            W_initializer=W_initializer,
+                            b_initializer=b_initializer
+                        )
             if i_layer < len(layer_sizes) - 1:
                 layer = nonlinearity(layer)
 

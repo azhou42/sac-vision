@@ -6,7 +6,7 @@ import numpy as np
 from sac.misc.mlp import mlp
 
 LOG_SIG_CAP_MAX = 2
-LOG_SIG_CAP_MIN = 20
+LOG_SIG_CAP_MIN = -20
 
 
 class GMM(object):

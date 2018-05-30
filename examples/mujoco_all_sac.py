@@ -19,13 +19,13 @@ config.DOCKER_IMAGE = "haarnoja/sac"  # needs psutils
 config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
 
 COMMON_PARAMS = {
-    "seed": [2 + 10*i for i in range(3)],
+    "seed": [2 + 10*i for i in range(10)],
     "lr": [3E-4],
     "discount": 0.99,
     "tau": 1,
     "target_update_freq": 1000,
     "K": 1,
-    "layer_size": 512,
+    "layer_size": 256,
     "batch_size": 256, # 100?
     "max_pool_size": 1e6, # [1e3, 1e4, 1e5],
     "learn_alpha": False,
@@ -122,7 +122,6 @@ def get_variants(args):
 
 def run_experiment(variant):
     if variant['env_name'] == 'humanoid-rllab':
-        1/0
         from rllab.envs.mujoco.humanoid_env import HumanoidEnv
         env = normalize(HumanoidEnv())
     elif variant['env_name'] == 'swimmer-rllab':

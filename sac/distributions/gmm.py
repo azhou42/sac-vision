@@ -110,10 +110,10 @@ class GMM(object):
             self._determ_action = tf.tanh(xz_mu_t)
 
             # Sample x.
-            # SIGMA = 0.1 # exploration noise
-            n = self._Dx
-            log_sigma = 2 / (n * np.log(2 * np.pi) + n)
-            SIGMA = np.exp(log_sigma)
+            SIGMA = 0.1 # exploration noise
+            # n = self._Dx
+            # log_sigma = 2 / (n * np.log(2 * np.pi) + n)
+            # SIGMA = np.exp(log_sigma)
 
             x_t = tf.tanh(xz_mu_t) + SIGMA * tf.random_normal((N_t, Dx))  # N x Dx
             x_t = tf.stop_gradient(x_t)

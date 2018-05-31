@@ -34,7 +34,7 @@ COMMON_PARAMS = {
     "epoch_length": 1000,
     "freeze_pool_after_full": False, # make sure this is false for real runs
     "reparameterize": True,
-    "snapshot_mode": 'gap',
+    "snapshot_mode": 'last',
     "snapshot_gap": 100,
     "sync_pkl": True,
 }
@@ -53,13 +53,13 @@ ENV_PARAMS = {
         'env_name': 'Hopper-v1',
         'max_path_length': 1000,
         'n_epochs': 3000,
-        'scale_reward': [1,3],
+        'scale_reward': [1],
     },
     'half-cheetah': { # 6 DoF
         'prefix': 'half-cheetah',
         'env_name': 'HalfCheetah-v1',
         'max_path_length': 1000,
-        'n_epochs': 1000,
+        'n_epochs': 3000,
         "n_random_steps": 10000,
         'scale_reward': [1], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)], # 1, # scale rewards from 0.1 to 100
     },
@@ -67,7 +67,7 @@ ENV_PARAMS = {
         'prefix': 'walker',
         'env_name': 'Walker2d-v1',
         'max_path_length': 1000,
-        'n_epochs': 1000,
+        'n_epochs': 3000,
         "n_random_steps": 1000,
         'scale_reward': [1],
     },
@@ -79,9 +79,17 @@ ENV_PARAMS = {
         "n_random_steps": 10000,
         'scale_reward': [1], # [np.exp(r) for r in np.linspace(np.log(0.1), np.log(100), num=40)],
     },
-    'humanoid': { # 17 DoF
-        'prefix': 'humanoid',
+    'humanoid-gym': { # 17 DoF
+        'prefix': 'humanoid-gym',
         'env_name': 'Humanoid-v1', # switch to gym humanoid
+        'max_path_length': 1000,
+        'n_epochs': 10000,
+        "n_random_steps": 1000,
+        'scale_reward': [1], # [5,10,20,40],
+    },
+    'humanoid-rllab': { # 21 DoF
+        'prefix': 'humanoid-rllab',
+        'env_name': 'humanoid-rllab', # switch to gym humanoid
         'max_path_length': 1000,
         'n_epochs': 10000,
         "n_random_steps": 1000,
@@ -213,7 +221,7 @@ def launch_experiments(variant_generator):
             run_experiment,
             mode=args.mode,
             variant=variant,
-            exp_prefix='nips' + '/' + variant['prefix'] + '/' + args.exp_name,
+            exp_prefix='sac-camera-ready/ddpg/' + variant['prefix'] + '/' + args.exp_name,
             exp_name=variant['prefix'] + '-' + args.exp_name + '-' + str(i).zfill(2),
             n_parallel=1,
             seed=variant['seed'],

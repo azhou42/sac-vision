@@ -298,10 +298,12 @@ class SAC(RLAlgorithm, Serializable):
 
         actions, log_pi, raw_actions = self._policy.actions_for(
             observations=self._observations_ph, with_log_pis=True, with_raw_actions=True)
+        self._policy_params = self._policy.get_params_internal()
 
         with tf.variable_scope('target_policy'):
             target_policy_log_pi = self._policy.log_pis_for(observations=self._observations_ph,
                                                             raw_actions=raw_actions)
+            self._policy_target_params = self._policy.get_params_internal()
 
         log_alpha = tf.get_variable(
             'log_alpha',
@@ -386,6 +388,14 @@ class SAC(RLAlgorithm, Serializable):
         target_params = self._vf_target_params
 
         self._target_ops = [
+            tf.assign(target, (1 - self._tau) * target + self._tau * source)
+            for target, source in zip(target_params, source_params)
+        ]
+
+        source_params = self._policy_params
+        target_params = self._policy_target_params
+
+        self._target_ops += [
             tf.assign(target, (1 - self._tau) * target + self._tau * source)
             for target, source in zip(target_params, source_params)
         ]

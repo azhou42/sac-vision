@@ -206,6 +206,7 @@ def run_experiment(variant):
         reward_scale=algorithm_params['reward_scale'],
         discount=algorithm_params['discount'],
         tau=algorithm_params['tau'],
+        kl_constraint_lambda=algorithm_params['kl_constraint_lambda'],
         reparameterize=policy_params['reparameterize'],
         target_update_interval=algorithm_params['target_update_interval'],
         action_prior=policy_params['action_prior'],

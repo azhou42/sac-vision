@@ -85,6 +85,7 @@ class SAC(RLAlgorithm, Serializable):
 
             lr=3e-3,
             reward_scale=1.0,
+            kl_constraint_lambda=0.1,
             target_entropy='auto',
             discount=0.99,
             tau=0.01,
@@ -147,6 +148,7 @@ class SAC(RLAlgorithm, Serializable):
 
         self._discount = discount
         self._tau = tau
+        self._kl_constraint_lambda = kl_constraint_lambda
         self._target_update_interval = target_update_interval
         self._action_prior = action_prior
 
@@ -294,8 +296,12 @@ class SAC(RLAlgorithm, Serializable):
         of the value function and policy function update rules.
         """
 
-        actions, log_pi = self._policy.actions_for(
-            observations=self._observations_ph, with_log_pis=True)
+        actions, log_pi, raw_actions = self._policy.actions_for(
+            observations=self._observations_ph, with_log_pis=True, with_raw_actions=True)
+
+        with tf.variable_scope('target_policy'):
+            target_policy_log_pi = self._policy.log_pis_for(observations=self._observations_ph,
+                                                            raw_actions=raw_actions)
 
         log_alpha = tf.get_variable(
             'log_alpha',
@@ -332,8 +338,10 @@ class SAC(RLAlgorithm, Serializable):
         min_log_target = tf.minimum(log_target1, log_target2)
 
         if self._reparameterize:
+            # minimizes the objective D_KL(pi || exp(Q) - Z) + lambda * D_KL(pi || pi_target)
             policy_kl_loss = tf.reduce_mean(
-                alpha * log_pi - min_log_target - policy_prior_log_probs)
+                alpha * log_pi - min_log_target - policy_prior_log_probs +
+                self._kl_constraint_lambda * (log_pi - target_policy_log_pi))
         else:
             policy_kl_loss = tf.reduce_mean(
                 log_pi * tf.stop_gradient(

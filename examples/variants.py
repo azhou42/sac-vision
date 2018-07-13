@@ -207,6 +207,7 @@ ALGORITHM_PARAMS_BASE = {
     'tau': 0.005,
     'target_entropy': 'auto',
     'reward_scale': 1.0,
+    'kl_constraint_lambda': 0.1,
     'store_extra_policy_info': True,
 
     'base_kwargs': {

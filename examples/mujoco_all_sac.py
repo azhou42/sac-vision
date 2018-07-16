@@ -4,6 +4,10 @@ import os
 import tensorflow as tf
 import numpy as np
 
+from rllab import config
+config.DOCKER_IMAGE = "haarnoja/sac"  # needs psutils
+config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
+
 from rllab.envs.normalized_env import normalize
 from rllab.envs.mujoco.gather.ant_gather_env import AntGatherEnv
 from rllab.envs.mujoco.swimmer_env import SwimmerEnv
@@ -229,7 +233,7 @@ def launch_experiments(variant_generator, args):
         print("Experiment: {}/{}".format(i, num_experiments))
         run_params = variant['run_params']
 
-        experiment_prefix = variant['prefix'] + '/' + args.exp_name
+        experiment_prefix = 'sac-trust-region/' + variant['prefix'] + '/' + args.exp_name
         experiment_name = '{prefix}-{exp_name}-{i:02}'.format(
             prefix=variant['prefix'], exp_name=args.exp_name, i=i)
 

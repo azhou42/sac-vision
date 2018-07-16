@@ -206,8 +206,8 @@ ALGORITHM_PARAMS_BASE = {
     'target_update_interval': 1,
     'tau': 0.005,
     'target_entropy': None,
-    'reward_scale': 5.0,
-    'kl_constraint_lambda': 0.1,
+    'reward_scale': 1.0,
+    'kl_constraint_lambda': [0.0001, 0.001, 0.01, 0.1, 0.1],
     'store_extra_policy_info': True,
 
     'base_kwargs': {
@@ -232,22 +232,26 @@ ALGORITHM_PARAMS = {
         }
     },
     'hopper': {  # 3 DoF
+        'reward_scale': 1.,
         'base_kwargs': {
             'n_epochs': int(3e3 + 1),
         }
     },
     'half-cheetah': {  # 6 DoF
+        'reward_scale': 5.,
         'base_kwargs': {
             'n_epochs': int(3e3 + 1),
             'n_initial_exploration_steps': int(1e4),
         }
     },
     'walker': {  # 6 DoF
+        'reward_scale': 5.,
         'base_kwargs': {
             'n_epochs': int(3e3 + 1),
         }
     },
     'ant-gym': {  # 8 DoF
+        'reward_scale': 5.,
         'base_kwargs': {
             'n_epochs': int(3e3 + 1),
             'n_initial_exploration_steps': int(1e4),
@@ -260,11 +264,13 @@ ALGORITHM_PARAMS = {
         }
     },
     'humanoid-gym': {  # 17 DoF
+        'reward_scale': 10.,
         'base_kwargs': {
             'n_epochs': int(1e4 + 1),
         }
     },
     'humanoid-rllab': {  # 21 DoF
+        'reward_scale': 20.,
         'base_kwargs': {
             'n_epochs': int(1e4 + 1),
         }
@@ -287,7 +293,7 @@ SAMPLER_PARAMS = {
 }
 
 RUN_PARAMS_BASE = {
-    'seed': [1, 2, 3, 4, 5],
+    'seed': [1, 2, 3],
     'snapshot_mode': 'gap',
     'snapshot_gap': 1000,
     'sync_pkl': True,

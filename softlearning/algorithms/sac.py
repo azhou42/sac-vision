@@ -88,7 +88,8 @@ class SAC(RLAlgorithm, Serializable):
             kl_constraint_lambda=0.1,
             target_entropy='auto',
             discount=0.99,
-            tau=0.01,
+            vf_tau=0.01,
+            policy_tau=0.01,
             target_update_interval=1,
             action_prior='uniform',
             reparameterize=False,
@@ -147,7 +148,8 @@ class SAC(RLAlgorithm, Serializable):
             else target_entropy)
 
         self._discount = discount
-        self._tau = tau
+        self._vf_tau = vf_tau
+        self._policy_tau = policy_tau
         self._kl_constraint_lambda = kl_constraint_lambda
         self._target_update_interval = target_update_interval
         self._action_prior = action_prior
@@ -381,22 +383,23 @@ class SAC(RLAlgorithm, Serializable):
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)
 
-    def _init_target_ops(self):
+    def _init_target_vf_ops(self):
         """Create tensorflow operations for updating target value function."""
 
         source_params = self._vf_params
         target_params = self._vf_target_params
 
-        self._target_ops = [
-            tf.assign(target, (1 - self._tau) * target + self._tau * source)
+        self._vf_target_ops = [
+            tf.assign(target, (1 - self._vf_tau) * target + self._vf_tau * source)
             for target, source in zip(target_params, source_params)
         ]
 
+    def _init_target_policy_ops(self):
         source_params = self._policy_params
         target_params = self._policy_target_params
 
-        self._target_ops += [
-            tf.assign(target, (1 - self._tau) * target + self._tau * source)
+        self._policy_target_ops += [
+            tf.assign(target, (1 - self._policy_tau) * target + self._policy_tau * source)
             for target, source in zip(target_params, source_params)
         ]
 
@@ -411,9 +414,13 @@ class SAC(RLAlgorithm, Serializable):
         feed_dict = self._get_feed_dict(iteration, batch)
         self._sess.run(self._training_ops, feed_dict)
 
-        if iteration % self._target_update_interval == 0:
+        if iteration % self._vf_target_update_interval == 0:
             # Run target ops here.
-            self._sess.run(self._target_ops)
+            self._sess.run(self._vf_target_ops)
+
+        if iteration % self._policy_target_update_interval == 0:
+            # Run target ops here.
+            self._sess.run(self._policy_target_ops)
 
     def _get_feed_dict(self, iteration, batch):
         """Construct TensorFlow feed_dict from sample batch."""

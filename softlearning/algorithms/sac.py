@@ -339,6 +339,8 @@ class SAC(RLAlgorithm, Serializable):
             self._observations_ph, actions, reuse=True)  # N
         min_log_target = tf.minimum(log_target1, log_target2)
 
+        self._kl_with_target_policy = tf.reduce_mean(log_pi - target_policy_log_pi)
+        
         if self._reparameterize:
             # minimizes the objective D_KL(pi || exp(Q) - Z) + lambda * D_KL(pi || pi_target)
             policy_kl_loss = tf.reduce_mean(
@@ -447,12 +449,13 @@ class SAC(RLAlgorithm, Serializable):
         """
 
         feed_dict = self._get_feed_dict(iteration, batch)
-        qf1, qf2, vf, td_loss1, td_loss2 = self._sess.run(
+        qf1, qf2, vf, td_loss1, td_loss2, kl_with_target_policy = self._sess.run(
             (self._qf1_t,
              self._qf2_t,
              self._vf_t,
              self._td_loss1_t,
-             self._td_loss2_t),
+             self._td_loss2_t,
+             self._kl_with_target_policy),
             feed_dict)
 
         logger.record_tabular('qf1-avg', np.mean(qf1))
@@ -464,6 +467,7 @@ class SAC(RLAlgorithm, Serializable):
         logger.record_tabular('vf-std', np.std(vf))
         logger.record_tabular('mean-sq-bellman-error1', td_loss1)
         logger.record_tabular('mean-sq-bellman-error2', td_loss2)
+        logger.record_tabular('kl-with-target-policy', kl_with_target_policy)
 
         alpha = self._sess.run(self._alpha)
         logger.record_tabular('alpha', alpha)

@@ -203,11 +203,13 @@ ENV_PARAMS = {
 ALGORITHM_PARAMS_BASE = {
     'lr': 3e-4,
     'discount': 0.99,
-    'target_update_interval': 1,
-    'tau': 0.005,
+    'vf_target_update_interval': 1,
+    'policy_target_update_interval': 1,
+    'vf_tau': 0.005,
+    'policy_tau': 0.05,
     'target_entropy': None,
     'reward_scale': 1.0,
-    'kl_constraint_lambda': [0.0001, 0.001, 0.01, 0.1, 0.1],
+    'kl_constraint_lambda': [1.],
     'store_extra_policy_info': True,
 
     'base_kwargs': {

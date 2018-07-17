@@ -90,7 +90,8 @@ class SAC(RLAlgorithm, Serializable):
             discount=0.99,
             vf_tau=0.01,
             policy_tau=0.01,
-            target_update_interval=1,
+            vf_target_update_interval=1,
+            policy_target_update_interval=1,
             action_prior='uniform',
             reparameterize=False,
             store_extra_policy_info=False,
@@ -151,8 +152,11 @@ class SAC(RLAlgorithm, Serializable):
         self._vf_tau = vf_tau
         self._policy_tau = policy_tau
         self._kl_constraint_lambda = kl_constraint_lambda
-        self._target_update_interval = target_update_interval
+        self._vf_target_update_interval = vf_target_update_interval
+        self._policy_target_update_interval = policy_target_update_interval
         self._action_prior = action_prior
+
+        self._kl_epsilon = 0.01
 
         # Reparameterize parameter must match between the algorithm and the
         # policy actions are sampled from.
@@ -169,7 +173,8 @@ class SAC(RLAlgorithm, Serializable):
         self._init_placeholders()
         self._init_actor_update()
         self._init_critic_update()
-        self._init_target_ops()
+        self._init_target_vf_ops()
+        self._init_target_policy_ops()
 
         # Initialize all uninitialized variables. This prevents initializing
         # pre-trained policy and qf and vf variables.
@@ -313,6 +318,9 @@ class SAC(RLAlgorithm, Serializable):
             initializer=0.0)
         alpha = tf.exp(log_alpha)
 
+        kl_lambda = tf.get_variable('kl_lambda', dtype=tf.float32, initializer=self._kl_constraint_lambda)
+        self._kl_lambda = kl_lambda
+
         if isinstance(self._target_entropy, Number):
             alpha_loss = -tf.reduce_mean(
                 log_alpha * tf.stop_gradient(log_pi + self._target_entropy))
@@ -347,7 +355,7 @@ class SAC(RLAlgorithm, Serializable):
             # minimizes the objective D_KL(pi || exp(Q) - Z) + lambda * D_KL(pi || pi_target)
             policy_kl_loss = tf.reduce_mean(
                 alpha * log_pi - min_log_target - policy_prior_log_probs +
-                self._kl_constraint_lambda * (log_pi - target_policy_log_pi))
+                kl_lambda * (log_pi - target_policy_log_pi))
         else:
             policy_kl_loss = tf.reduce_mean(
                 log_pi * tf.stop_gradient(
@@ -382,6 +390,9 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._vf_params
         )
 
+        self._increase_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda * 2, 1e-5, 1e4))
+        self._decrease_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda / 2, 1e-5, 1e4))
+
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)
 
@@ -400,21 +411,28 @@ class SAC(RLAlgorithm, Serializable):
         source_params = self._policy_params
         target_params = self._policy_target_params
 
-        self._policy_target_ops += [
+        self._policy_target_ops = [
             tf.assign(target, (1 - self._policy_tau) * target + self._policy_tau * source)
             for target, source in zip(target_params, source_params)
         ]
 
     @overrides
     def _init_training(self):
-        self._sess.run(self._target_ops)
+        self._sess.run(self._vf_target_ops)
+        self._sess.run(self._policy_target_ops)
 
     @overrides
     def _do_training(self, iteration, batch):
         """Runs the operations for updating training and target ops."""
 
         feed_dict = self._get_feed_dict(iteration, batch)
-        self._sess.run(self._training_ops, feed_dict)
+        _, kl_div = self._sess.run([self._training_ops, self._kl_with_target_policy], feed_dict)
+
+        if iteration % 100 == 0:
+            if kl_div > self._kl_epsilon * 1.5:
+                self._sess.run(self._increase_lambda_op)
+            elif kl_div < self._kl_epsilon / 1.5:
+                self._sess.run(self._decrease_lambda_op)
 
         if iteration % self._vf_target_update_interval == 0:
             # Run target ops here.
@@ -456,13 +474,14 @@ class SAC(RLAlgorithm, Serializable):
         """
 
         feed_dict = self._get_feed_dict(iteration, batch)
-        qf1, qf2, vf, td_loss1, td_loss2, kl_with_target_policy = self._sess.run(
+        qf1, qf2, vf, td_loss1, td_loss2, kl_with_target_policy, kl_lambda = self._sess.run(
             (self._qf1_t,
              self._qf2_t,
              self._vf_t,
              self._td_loss1_t,
              self._td_loss2_t,
-             self._kl_with_target_policy),
+             self._kl_with_target_policy,
+             self._kl_lambda),
             feed_dict)
 
         logger.record_tabular('qf1-avg', np.mean(qf1))
@@ -475,6 +494,7 @@ class SAC(RLAlgorithm, Serializable):
         logger.record_tabular('mean-sq-bellman-error1', td_loss1)
         logger.record_tabular('mean-sq-bellman-error2', td_loss2)
         logger.record_tabular('kl-with-target-policy', kl_with_target_policy)
+        logger.record_tabular('kl_lambda', kl_lambda)
 
         alpha = self._sess.run(self._alpha)
         logger.record_tabular('alpha', alpha)

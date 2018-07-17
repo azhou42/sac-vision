@@ -206,7 +206,7 @@ ALGORITHM_PARAMS_BASE = {
     'vf_target_update_interval': 1,
     'policy_target_update_interval': 1,
     'vf_tau': 0.005,
-    'policy_tau': 0.05,
+    'policy_tau': 0.1,
     'target_entropy': None,
     'reward_scale': 1.0,
     'kl_constraint_lambda': [1.],
@@ -291,7 +291,7 @@ REPLAY_POOL_PARAMS = {
 SAMPLER_PARAMS = {
     'max_path_length': 1000,
     'min_pool_size': 1000,
-    'batch_size': 256,
+    'batch_size': 1024,
 }
 
 RUN_PARAMS_BASE = {

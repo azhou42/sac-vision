@@ -86,6 +86,7 @@ class SAC(RLAlgorithm, Serializable):
             lr=3e-3,
             reward_scale=1.0,
             kl_constraint_lambda=0.1,
+            kl_epsilon=0.005,
             target_entropy='auto',
             discount=0.99,
             vf_tau=0.01,
@@ -156,7 +157,7 @@ class SAC(RLAlgorithm, Serializable):
         self._policy_target_update_interval = policy_target_update_interval
         self._action_prior = action_prior
 
-        self._kl_epsilon = 0.01
+        self._kl_epsilon = kl_epsilon
 
         # Reparameterize parameter must match between the algorithm and the
         # policy actions are sampled from.
@@ -185,6 +186,8 @@ class SAC(RLAlgorithm, Serializable):
             except tf.errors.FailedPreconditionError:
                 uninit_vars.append(var)
         self._sess.run(tf.variables_initializer(uninit_vars))
+
+        self._total_kl_div = 0.
 
     @overrides
     def train(self):
@@ -427,12 +430,15 @@ class SAC(RLAlgorithm, Serializable):
 
         feed_dict = self._get_feed_dict(iteration, batch)
         _, kl_div = self._sess.run([self._training_ops, self._kl_with_target_policy], feed_dict)
+        self._total_kl_div += kl_div
 
-        if iteration % 100 == 0:
-            if kl_div > self._kl_epsilon * 1.5:
+        if iteration % 100 == 0 and self._kl_epsilon is not None:
+            print("kl total div over 100 ops", self._total_kl_div / 100)
+            if self._total_kl_div / 100 > self._kl_epsilon * 1.5:
                 self._sess.run(self._increase_lambda_op)
-            elif kl_div < self._kl_epsilon / 1.5:
+            elif self._total_kl_div / 100 < self._kl_epsilon / 1.5:
                 self._sess.run(self._decrease_lambda_op)
+            self._total_kl_div = 0.
 
         if iteration % self._vf_target_update_interval == 0:
             # Run target ops here.

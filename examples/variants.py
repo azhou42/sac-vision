@@ -210,6 +210,7 @@ ALGORITHM_PARAMS_BASE = {
     'target_entropy': None,
     'reward_scale': 1.0,
     'kl_constraint_lambda': [1.],
+    'kl_epsilon': [0.001, 0.005, 0.01],
     'store_extra_policy_info': True,
 
     'base_kwargs': {
@@ -290,8 +291,8 @@ REPLAY_POOL_PARAMS = {
 
 SAMPLER_PARAMS = {
     'max_path_length': 1000,
-    'min_pool_size': 1000,
-    'batch_size': 1024,
+    'min_pool_size': 5000,
+    'batch_size': 4096,
 }
 
 RUN_PARAMS_BASE = {

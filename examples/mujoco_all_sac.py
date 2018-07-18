@@ -212,6 +212,7 @@ def run_experiment(variant):
         vf_tau=algorithm_params['vf_tau'],
         policy_tau=algorithm_params['policy_tau'],
         kl_constraint_lambda=algorithm_params['kl_constraint_lambda'],
+        kl_epsilon=algorithm_params['kl_epsilon'],
         reparameterize=policy_params['reparameterize'],
         vf_target_update_interval=algorithm_params['vf_target_update_interval'],
         policy_target_update_interval=algorithm_params['policy_target_update_interval'],

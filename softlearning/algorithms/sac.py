@@ -358,7 +358,7 @@ class SAC(RLAlgorithm, Serializable):
               + policy_prior_log_probs)
         )**2)
 
-        policy_train_op = tf.train.AdamOptimizer(self._policy_lr).minimize(
+        policy_train_op = tf.contrib.KfacOptimizer(self._policy_lr).minimize(
             loss=policy_loss,
             var_list=self._policy.get_params_internal()
         )

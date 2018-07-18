@@ -282,11 +282,11 @@ REPLAY_POOL_PARAMS = {
 SAMPLER_PARAMS = {
     'max_path_length': 1000,
     'min_pool_size': 1000,
-    'batch_size': 256,
+    'batch_size': [256, 512, 1024, 2048],
 }
 
 RUN_PARAMS_BASE = {
-    'seed': [1, 2, 3, 4, 5],
+    'seed': [1, 2, 3],
     'snapshot_mode': 'gap',
     'snapshot_gap': 1000,
     'sync_pkl': True,

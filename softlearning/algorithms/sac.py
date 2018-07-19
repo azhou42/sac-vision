@@ -8,6 +8,7 @@ from rllab.misc import logger
 from rllab.misc.overrides import overrides
 
 from .rl_algorithm import RLAlgorithm
+from softlearning.kfac import KfacOptimizer
 
 
 class SAC(RLAlgorithm, Serializable):
@@ -358,10 +359,16 @@ class SAC(RLAlgorithm, Serializable):
               + policy_prior_log_probs)
         )**2)
 
-        policy_train_op = tf.contrib.KfacOptimizer(self._policy_lr).minimize(
-            loss=policy_loss,
-            var_list=self._policy.get_params_internal()
-        )
+        kfac_stepsize = tf.Variable(initial_value=np.float32(np.array(0.03)), name='stepsize')
+        optim = KfacOptimizer(learning_rate=kfac_stepsize, cold_lr=kfac_stepsize * (1 - 0.9), momentum=0.9, kfac_update=2,
+                                   epsilon=1e-2, stats_decay=0.99, async=1, cold_iter=1,
+                                   max_grad_norm=None)
+        policy_loss_sampled = - tf.reduce_mean(log_pi) # just - log pi?
+        policy_train_op, q_runner = optim.minimize(policy_kl_loss, policy_loss_sampled,
+                                                   var_list=self._policy.get_params_internal())
+        enqueue_threads = []
+        coord = tf.train.Coordinator()
+        enqueue_threads.extend(q_runner.create_threads(tf.get_default_session(), coord=coord, start=True))
 
         vf_train_op = tf.train.AdamOptimizer(self._vf_lr).minimize(
             loss=self._vf_loss_t,

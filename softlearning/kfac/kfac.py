@@ -68,7 +68,6 @@ class KfacOptimizer():
             # hard coded search stratergy
             bpropOp = gradient.op
             bpropOp_name = bpropOp.name
-            # import ipdb; ipdb.set_trace()
 
             bTensors = []
             fTensors = []
@@ -83,7 +82,6 @@ class KfacOptimizer():
                 # TO-DO: need to check all the attribute of the ops as well
                 print(gradient.name)
                 print(op_names)
-                # import ipdb; ipdb.set_trace()
                 print(len(np.unique(op_names)))
                 assert len(np.unique(op_names)) == 1, gradient.name + \
                                                       ' is shared among different computation OPs'
@@ -98,7 +96,6 @@ class KfacOptimizer():
             else:
                 fpropOp_name = re.search(
                     'gradientsSampled(_[0-9]+|)/(.+?)_grad', bpropOp_name).group(2)
-                # import ipdb; ipdb.set_trace()
                 fpropOp = graph.get_operation_by_name(fpropOp_name)
                 if fpropOp.op_def.name in KFAC_OPS:
                     # Known OPs
@@ -129,7 +126,6 @@ class KfacOptimizer():
                     fpropOp_name = 'UNK-' + fpropOp.op_def.name
                     opTypes.append(fpropOp_name)
 
-            # import ipdb; ipdb.set_trace()
             return {'opName': fpropOp_name, 'op': fpropOp, 'fpropFactors': fTensors, 'bpropFactors': bTensors}
 
         for t, param in zip(g, varlist):

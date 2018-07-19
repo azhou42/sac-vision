@@ -359,7 +359,7 @@ class SAC(RLAlgorithm, Serializable):
               + policy_prior_log_probs)
         )**2)
 
-        kfac_stepsize = tf.Variable(initial_value=np.float32(np.array(0.03)), name='stepsize')
+        kfac_stepsize = tf.Variable(initial_value=np.float32(np.array(0.003)), name='stepsize')
         optim = KfacOptimizer(learning_rate=kfac_stepsize, cold_lr=kfac_stepsize * (1 - 0.9), momentum=0.9, kfac_update=2,
                                    epsilon=1e-2, stats_decay=0.99, async=1, cold_iter=1,
                                    max_grad_norm=None)

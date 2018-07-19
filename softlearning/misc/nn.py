@@ -23,7 +23,8 @@ def feedforward_net(inputs,
             initializer=tf.contrib.layers.xavier_initializer())
 
         # `tf.tensordot` supports broadcasting
-        return tf.tensordot(x, weight, axes=((-1, ), (0, )))
+        # return tf.tensordot(x, weight, axes=((-1, ), (0, )))
+        return tf.matmul(x, weight)
 
     out = 0
     for i, layer_size in enumerate(layer_sizes):
@@ -34,7 +35,8 @@ def feedforward_net(inputs,
             else:
                 out = linear(out, layer_size)
 
-            out += bias(layer_size)
+            # out += bias(layer_size)
+            out = tf.nn.bias_add(out, bias(layer_size))
 
             if i < len(layer_sizes) - 1 and activation_fn:
                 out = activation_fn(out)

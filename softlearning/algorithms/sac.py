@@ -86,10 +86,14 @@ class SAC(RLAlgorithm, Serializable):
 
             lr=3e-3,
             reward_scale=1.0,
+            kl_constraint_lambda=0.1,
+            kl_epsilon=0.005,
             target_entropy='auto',
             discount=0.99,
-            tau=0.01,
-            target_update_interval=1,
+            vf_tau=0.01,
+            policy_tau=0.01,
+            vf_target_update_interval=1,
+            policy_target_update_interval=1,
             action_prior='uniform',
             reparameterize=False,
             store_extra_policy_info=False,
@@ -147,9 +151,14 @@ class SAC(RLAlgorithm, Serializable):
             else target_entropy)
 
         self._discount = discount
-        self._tau = tau
-        self._target_update_interval = target_update_interval
+        self._vf_tau = vf_tau
+        self._policy_tau = policy_tau
+        self._kl_constraint_lambda = kl_constraint_lambda
+        self._vf_target_update_interval = vf_target_update_interval
+        self._policy_target_update_interval = policy_target_update_interval
         self._action_prior = action_prior
+
+        self._kl_epsilon = kl_epsilon
 
         # Reparameterize parameter must match between the algorithm and the
         # policy actions are sampled from.
@@ -166,7 +175,8 @@ class SAC(RLAlgorithm, Serializable):
         self._init_placeholders()
         self._init_actor_update()
         self._init_critic_update()
-        self._init_target_ops()
+        self._init_target_vf_ops()
+        self._init_target_policy_ops()
 
         # Initialize all uninitialized variables. This prevents initializing
         # pre-trained policy and qf and vf variables.
@@ -177,6 +187,8 @@ class SAC(RLAlgorithm, Serializable):
             except tf.errors.FailedPreconditionError:
                 uninit_vars.append(var)
         self._sess.run(tf.variables_initializer(uninit_vars))
+
+        self._total_kl_div = 0.
 
     @overrides
     def train(self):
@@ -267,6 +279,7 @@ class SAC(RLAlgorithm, Serializable):
         self._td_loss1_t = 0.5 * tf.reduce_mean((ys - self._qf1_t)**2)
         self._td_loss2_t = 0.5 * tf.reduce_mean((ys - self._qf2_t)**2)
 
+
         qf1_train_op = tf.train.AdamOptimizer(self._qf_lr).minimize(
             loss=self._td_loss1_t,
             var_list=self._qf1.get_params_internal()
@@ -276,6 +289,22 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._qf2.get_params_internal()
         )
 
+        """
+        qf1_samples = tf.stop_gradient(self._qf1_t + tf.random_normal(tf.shape(self._qf1)))
+        qf2_samples = tf.stop_gradient(self._qf2_t + tf.random_normal(tf.shape(self._qf2)))
+        qf1_loss_sampled = tf.reduce_mean((self._qf1_t - qf1_samples) ** 2)
+        qf2_loss_sampled = tf.reduce_mean((self._qf2_t - qf2_samples) ** 2)
+
+        qf1_optim = KfacOptimizer(learning_rate=0.001, cold_lr=0.001 * (1 - 0.9), momentum=0.9,
+                                  clip_kl=0.3, epsilon=0.1, stats_decay=0.95,
+                                  async=1, kfac_update=2, cold_iter=50,
+                                  weight_decay_dict=None, max_grad_norm=None)
+        qf2_optim = KfacOptimizer(learning_rate=0.001, cold_lr=0.001 * (1 - 0.9), momentum=0.9,
+                                  clip_kl=0.3, epsilon=0.1, stats_decay=0.95,
+                                  async=1, kfac_update=2, cold_iter=50,
+                                  weight_decay_dict=None, max_grad_norm=None)
+        qf1_train_op, qf_1
+        """
         self._training_ops.append(qf1_train_op)
         self._training_ops.append(qf2_train_op)
 
@@ -295,14 +324,23 @@ class SAC(RLAlgorithm, Serializable):
         of the value function and policy function update rules.
         """
 
-        actions, log_pi = self._policy.actions_for(
-            observations=self._observations_ph, with_log_pis=True)
+        actions, log_pi, raw_actions = self._policy.actions_for(
+            observations=self._observations_ph, with_log_pis=True, with_raw_actions=True)
+        self._policy_params = self._policy.get_params_internal()
+
+        with tf.variable_scope('target_policy'):
+            target_policy_log_pi = self._policy.log_pis_for(observations=self._observations_ph,
+                                                            raw_actions=raw_actions)
+            self._policy_target_params = self._policy.get_params_internal()
 
         log_alpha = tf.get_variable(
             'log_alpha',
             dtype=tf.float32,
             initializer=0.0)
         alpha = tf.exp(log_alpha)
+
+        kl_lambda = tf.get_variable('kl_lambda', dtype=tf.float32, initializer=self._kl_constraint_lambda)
+        self._kl_lambda = kl_lambda
 
         if isinstance(self._target_entropy, Number):
             alpha_loss = -tf.reduce_mean(
@@ -332,7 +370,10 @@ class SAC(RLAlgorithm, Serializable):
             self._observations_ph, actions, reuse=True)  # N
         min_log_target = tf.minimum(log_target1, log_target2)
 
+        self._kl_with_target_policy = tf.reduce_mean(log_pi - target_policy_log_pi)
+        
         if self._reparameterize:
+            # minimizes the objective D_KL(pi || exp(Q) - Z) + lambda * D_KL(pi || pi_target)
             policy_kl_loss = tf.reduce_mean(
                 alpha * log_pi - min_log_target - policy_prior_log_probs)
         else:
@@ -360,9 +401,11 @@ class SAC(RLAlgorithm, Serializable):
         )**2)
 
         kfac_stepsize = tf.Variable(initial_value=np.float32(np.array(0.003)), name='stepsize')
+        self._stepsize = kfac_stepsize
         optim = KfacOptimizer(learning_rate=kfac_stepsize, cold_lr=kfac_stepsize * (1 - 0.9), momentum=0.9, kfac_update=2,
-                                   epsilon=1e-2, stats_decay=0.99, async=1, cold_iter=1,
+                                   epsilon=1e-2, stats_decay=0.99, async=False, cold_iter=1,
                                    max_grad_norm=None)
+
         policy_loss_sampled = - tf.reduce_mean(log_pi) # just - log pi?
         policy_train_op, q_runner = optim.minimize(policy_kl_loss, policy_loss_sampled,
                                                    var_list=self._policy.get_params_internal())
@@ -375,34 +418,60 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._vf_params
         )
 
+        self._increase_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize * 1.5, 1e-5, 1e-2))
+        self._decrease_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize / 1.5, 1e-5, 1e-2))
+
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)
 
-    def _init_target_ops(self):
+    def _init_target_vf_ops(self):
         """Create tensorflow operations for updating target value function."""
 
         source_params = self._vf_params
         target_params = self._vf_target_params
 
-        self._target_ops = [
-            tf.assign(target, (1 - self._tau) * target + self._tau * source)
+        self._vf_target_ops = [
+            tf.assign(target, (1 - self._vf_tau) * target + self._vf_tau * source)
+            for target, source in zip(target_params, source_params)
+        ]
+
+    def _init_target_policy_ops(self):
+        source_params = self._policy_params
+        target_params = self._policy_target_params
+
+        self._policy_target_ops = [
+            tf.assign(target, (1 - self._policy_tau) * target + self._policy_tau * source)
             for target, source in zip(target_params, source_params)
         ]
 
     @overrides
     def _init_training(self):
-        self._sess.run(self._target_ops)
+        self._sess.run(self._vf_target_ops)
+        self._sess.run(self._policy_target_ops)
 
     @overrides
     def _do_training(self, iteration, batch):
         """Runs the operations for updating training and target ops."""
 
         feed_dict = self._get_feed_dict(iteration, batch)
-        self._sess.run(self._training_ops, feed_dict)
+        _, kl_div = self._sess.run([self._training_ops, self._kl_with_target_policy], feed_dict)
+        self._total_kl_div += kl_div
 
-        if iteration % self._target_update_interval == 0:
+        if iteration % 100 == 0 and self._kl_epsilon is not None:
+            print("kl total div over 100 ops", self._total_kl_div / 100)
+            if self._total_kl_div / 100 > self._kl_epsilon * 2:
+                self._sess.run(self._decrease_stepsize_op)
+            elif self._total_kl_div / 100 < self._kl_epsilon / 2:
+                self._sess.run(self._increase_stepsize_op)
+            self._total_kl_div = 0.
+
+        if iteration % self._vf_target_update_interval == 0:
             # Run target ops here.
-            self._sess.run(self._target_ops)
+            self._sess.run(self._vf_target_ops)
+
+        if iteration % self._policy_target_update_interval == 0:
+            # Run target ops here.
+            self._sess.run(self._policy_target_ops)
 
     def _get_feed_dict(self, iteration, batch):
         """Construct TensorFlow feed_dict from sample batch."""
@@ -436,12 +505,14 @@ class SAC(RLAlgorithm, Serializable):
         """
 
         feed_dict = self._get_feed_dict(iteration, batch)
-        qf1, qf2, vf, td_loss1, td_loss2 = self._sess.run(
+        qf1, qf2, vf, td_loss1, td_loss2, kl_with_target_policy, kfac_stepsize = self._sess.run(
             (self._qf1_t,
              self._qf2_t,
              self._vf_t,
              self._td_loss1_t,
-             self._td_loss2_t),
+             self._td_loss2_t,
+             self._kl_with_target_policy,
+             self._stepsize),
             feed_dict)
 
         logger.record_tabular('qf1-avg', np.mean(qf1))
@@ -453,6 +524,8 @@ class SAC(RLAlgorithm, Serializable):
         logger.record_tabular('vf-std', np.std(vf))
         logger.record_tabular('mean-sq-bellman-error1', td_loss1)
         logger.record_tabular('mean-sq-bellman-error2', td_loss2)
+        logger.record_tabular('kl-with-target-policy', kl_with_target_policy)
+        logger.record_tabular('kfac_stepsize', kfac_stepsize)
 
         alpha = self._sess.run(self._alpha)
         logger.record_tabular('alpha', alpha)

@@ -4,6 +4,10 @@ import os
 import tensorflow as tf
 import numpy as np
 
+from rllab import config
+config.DOCKER_IMAGE = "haarnoja/sac"  # needs psutils
+config.AWS_IMAGE_ID = "ami-a3a8b3da"  # with docker already pulled
+
 from rllab.envs.normalized_env import normalize
 from rllab.envs.mujoco.gather.ant_gather_env import AntGatherEnv
 from rllab.envs.mujoco.swimmer_env import SwimmerEnv
@@ -205,9 +209,13 @@ def run_experiment(variant):
         target_entropy=algorithm_params['target_entropy'],
         reward_scale=algorithm_params['reward_scale'],
         discount=algorithm_params['discount'],
-        tau=algorithm_params['tau'],
+        vf_tau=algorithm_params['vf_tau'],
+        policy_tau=algorithm_params['policy_tau'],
+        kl_constraint_lambda=algorithm_params['kl_constraint_lambda'],
+        kl_epsilon=algorithm_params['kl_epsilon'],
         reparameterize=policy_params['reparameterize'],
-        target_update_interval=algorithm_params['target_update_interval'],
+        vf_target_update_interval=algorithm_params['vf_target_update_interval'],
+        policy_target_update_interval=algorithm_params['policy_target_update_interval'],
         action_prior=policy_params['action_prior'],
         store_extra_policy_info=algorithm_params['store_extra_policy_info'],
         save_full_state=False,
@@ -228,7 +236,7 @@ def launch_experiments(variant_generator, args):
         print("Experiment: {}/{}".format(i, num_experiments))
         run_params = variant['run_params']
 
-        experiment_prefix = variant['prefix'] + '/' + args.exp_name
+        experiment_prefix = 'sac-kfac-trust-region/' + variant['prefix'] + '/' + args.exp_name
         experiment_name = '{prefix}-{exp_name}-{i:02}'.format(
             prefix=variant['prefix'], exp_name=args.exp_name, i=i)
 

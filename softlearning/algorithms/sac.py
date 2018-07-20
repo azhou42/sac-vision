@@ -427,8 +427,8 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._vf_params
         )
 
-        self._increase_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize * 1.5, 1e-5, 1e-2))
-        self._decrease_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize / 1.5, 1e-5, 1e-2))
+        self._increase_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize * 1.5, 1e-6, 1e-2))
+        self._decrease_stepsize_op = tf.assign(kfac_stepsize, tf.clip_by_value(kfac_stepsize / 1.5, 1e-6, 1e-2))
 
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)

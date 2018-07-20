@@ -172,6 +172,7 @@ class SAC(RLAlgorithm, Serializable):
 
         self._training_ops = list()
 
+        self._coord = tf.train.Coordinator()
         self._init_placeholders()
         self._init_actor_update()
         self._init_critic_update()
@@ -289,22 +290,30 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._qf2.get_params_internal()
         )
 
+
         """
-        qf1_samples = tf.stop_gradient(self._qf1_t + tf.random_normal(tf.shape(self._qf1)))
-        qf2_samples = tf.stop_gradient(self._qf2_t + tf.random_normal(tf.shape(self._qf2)))
+        qf1_samples = tf.stop_gradient(self._qf1_t + tf.random_normal(tf.shape(self._qf1_t)))
+        qf2_samples = tf.stop_gradient(self._qf2_t + tf.random_normal(tf.shape(self._qf2_t)))
         qf1_loss_sampled = tf.reduce_mean((self._qf1_t - qf1_samples) ** 2)
         qf2_loss_sampled = tf.reduce_mean((self._qf2_t - qf2_samples) ** 2)
 
         qf1_optim = KfacOptimizer(learning_rate=0.001, cold_lr=0.001 * (1 - 0.9), momentum=0.9,
                                   clip_kl=0.3, epsilon=0.1, stats_decay=0.95,
                                   async=1, kfac_update=2, cold_iter=50,
-                                  weight_decay_dict=None, max_grad_norm=None)
+                                  weight_decay_dict={}, max_grad_norm=None)
         qf2_optim = KfacOptimizer(learning_rate=0.001, cold_lr=0.001 * (1 - 0.9), momentum=0.9,
                                   clip_kl=0.3, epsilon=0.1, stats_decay=0.95,
                                   async=1, kfac_update=2, cold_iter=50,
-                                  weight_decay_dict=None, max_grad_norm=None)
-        qf1_train_op, qf_1
+                                  weight_decay_dict={}, max_grad_norm=None)
+
+        qf1_train_op, qf1_q_runner = qf1_optim.minimize(loss=self._td_loss1_t, loss_sampled=qf1_loss_sampled,
+                                                        var_list=self._qf1.get_params_internal())
+        qf2_train_op, qf2_q_runner = qf2_optim.minimize(loss=self._td_loss2_t, loss_sampled=qf2_loss_sampled,
+                                                        var_list=self._qf2.get_params_internal())
+        qf1_q_runner.create_threads(tf.get_default_session(), coord=self._coord, start=True)
+        qf2_q_runner.create_threads(tf.get_default_session(), coord=self._coord, start=True)
         """
+
         self._training_ops.append(qf1_train_op)
         self._training_ops.append(qf2_train_op)
 
@@ -403,15 +412,15 @@ class SAC(RLAlgorithm, Serializable):
         kfac_stepsize = tf.Variable(initial_value=np.float32(np.array(0.003)), name='stepsize')
         self._stepsize = kfac_stepsize
         optim = KfacOptimizer(learning_rate=kfac_stepsize, cold_lr=kfac_stepsize * (1 - 0.9), momentum=0.9, kfac_update=2,
-                                   epsilon=1e-2, stats_decay=0.99, async=False, cold_iter=1,
+                                   epsilon=1e-2, stats_decay=0.99, async=True, cold_iter=1,
                                    max_grad_norm=None)
+        self._kfac_stats_step = optim.stats_step
 
         policy_loss_sampled = - tf.reduce_mean(log_pi) # just - log pi?
         policy_train_op, q_runner = optim.minimize(policy_kl_loss, policy_loss_sampled,
                                                    var_list=self._policy.get_params_internal())
         enqueue_threads = []
-        coord = tf.train.Coordinator()
-        enqueue_threads.extend(q_runner.create_threads(tf.get_default_session(), coord=coord, start=True))
+        enqueue_threads.extend(q_runner.create_threads(tf.get_default_session(), coord=self._coord, start=True))
 
         vf_train_op = tf.train.AdamOptimizer(self._vf_lr).minimize(
             loss=self._vf_loss_t,

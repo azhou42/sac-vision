@@ -209,8 +209,8 @@ ALGORITHM_PARAMS_BASE = {
     'policy_tau': 0.1,
     'target_entropy': None,
     'reward_scale': 1.0,
-    'kl_constraint_lambda': [1.],
-    'kl_epsilon': [0.001, 0.005, 0.01],
+    'kl_constraint_lambda': 0.0001,
+    'kl_epsilon': None, # [0.001, 0.005, 0.01],
     'store_extra_policy_info': True,
 
     'base_kwargs': {

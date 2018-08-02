@@ -402,8 +402,8 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._vf_params
         )
 
-        self._increase_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda * 2, 1e-5, 1e4))
-        self._decrease_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda / 2, 1e-5, 1e4))
+        self._increase_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda * 2, 1e-5, 1e5))
+        self._decrease_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda / 2, 1e-5, 1e5))
 
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)

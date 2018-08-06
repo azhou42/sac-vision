@@ -313,7 +313,13 @@ class SAC(RLAlgorithm, Serializable):
         with tf.variable_scope('target_policy'):
             target_policy_log_pi = self._policy.log_pis_for(observations=self._observations_ph,
                                                             raw_actions=raw_actions)
+
+            target_actions, target_log_pi, target_raw_actions = self._policy.actions_for(
+                observations=self._observations_ph, with_log_pis=True, with_raw_actions=True
+            )
             self._policy_target_params = self._policy.get_params_internal()
+        log_pi_for_targ_actions = self._policy.log_pis_for(observations=self._observations_ph,
+                                                           raw_actions=target_raw_actions)
 
         log_alpha = tf.get_variable(
             'log_alpha',
@@ -352,8 +358,11 @@ class SAC(RLAlgorithm, Serializable):
             self._observations_ph, actions, reuse=True)  # N
         min_log_target = tf.minimum(log_target1, log_target2)
 
-        self._kl_with_target_policy = tf.reduce_mean(log_pi - target_policy_log_pi)
-        
+        # self._kl_with_target_policy = tf.reduce_mean(log_pi - target_policy_log_pi)
+
+        # reverse KL, KL(targ, current)
+        self._kl_with_target_policy = tf.reduce_mean(target_log_pi - log_pi_for_targ_actions)
+
         if self._reparameterize:
             # minimizes the objective D_KL(pi || exp(Q) - Z) + lambda * D_KL(pi || pi_target)
             policy_kl_loss = tf.reduce_mean(
@@ -393,8 +402,8 @@ class SAC(RLAlgorithm, Serializable):
             var_list=self._vf_params
         )
 
-        self._increase_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda * 2, 1e-5, 1e4))
-        self._decrease_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda / 2, 1e-5, 1e4))
+        self._increase_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda * 2, 1e-5, 1e5))
+        self._decrease_lambda_op = tf.assign(kl_lambda, tf.clip_by_value(kl_lambda / 2, 1e-5, 1e5))
 
         self._training_ops.append(policy_train_op)
         self._training_ops.append(vf_train_op)

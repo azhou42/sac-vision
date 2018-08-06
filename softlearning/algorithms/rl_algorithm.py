@@ -112,6 +112,7 @@ class RLAlgorithm(Algorithm):
                         continue
                     gt.stamp('sample')
 
+                for t in range(self._epoch_length):
                     for i in range(self._n_train_repeat):
                         self._do_training(
                             iteration=t + epoch * self._epoch_length,
